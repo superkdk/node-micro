@@ -3,8 +3,14 @@ const conn = {
   host: 'localhost',
   user: 'micro',
   password: 'service',
-  database: 'monolithic'
+  database: 'monolithic',
+  multipleStatements: true
 };
+
+const redis = require('redis').createClient();
+redis.on('error', (err) => {
+  console.log('Redis Error ' + err);
+});
 
 /**
  * 상품 관리의 각 기능별로 분기
@@ -51,12 +57,16 @@ function register(method, pathname, params, cb) {
     var connection = mysql.createConnection(conn);
     connection.connect();
     connection.query(
-      'INSERT INTO goods (name, category, price, description) VALUES(?, ?, ?, ?)',
+      'INSERT INTO goods (name, category, price, description) VALUES(?, ?, ?, ?); ' +
+      'SELECT LAST_INSERT_ID() AS id;',
       [params.name, params.category, params.price, params.description],
       (error, results, fields) => {
         if(error) {
           response.errorcode = 1;
           response.errormessage = error;
+        } else {
+          const id = results[1][0].id;
+          redis.set(id, JSON.stringify(params));
         }
         cb(response);
       });
@@ -117,6 +127,8 @@ function unregister(method, pathname, params, cb) {
       if(error) {
         response.errorcode = 1;
         response.errormessage = error;
+      } else {
+        redis.del(params.id);
       }
       cb(response);
     });
